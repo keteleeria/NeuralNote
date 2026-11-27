@@ -82,14 +82,15 @@ private:
     std::atomic<float> mMasterMeanSquare {0.0f};
     std::atomic<std::uint32_t> mMeterFrame {0};
 
-    double mPlayheadTime = 0;
+    std::atomic<double> mPlayheadTime {0.0};
+    std::atomic<double> mPendingPlayheadTime {-1.0};
     double mSampleRate = 44100;
 
     float mGainSourceAudio = 0;
     float mGainSynth = 0;
     float mMasterGain = 1;
 
-    bool mShouldOutputMidi = false;
+    std::atomic<bool> mShouldOutputMidi {false};
     bool mWasOutputtingMidi = false;
 
     std::atomic<bool> mShouldLoop = false;

@@ -3,6 +3,9 @@
 //
 
 #include "SynthController.h"
+
+#include <algorithm>
+
 #include "PluginProcessor.h"
 
 SynthController::SynthController(NeuralNoteAudioProcessor* inProcessor)
@@ -30,6 +33,11 @@ const MidiBuffer& SynthController::generateNextMidiBuffer(int inNumSamples, bool
 {
     mMidiBuffer.clear();
 
+    const double pending_seek = mPendingSeekTime.exchange(-1.0, std::memory_order_acq_rel);
+    if (pending_seek >= 0.0) {
+        mScheduler.setTimeSeconds(pending_seek);
+    }
+
     mScheduler.renderNextBlock(mMidiBuffer, inNumSamples, inIsPlaying);
 
     // Only while playing: this is called every block now, and with no audio loaded the duration is
@@ -39,7 +47,7 @@ const MidiBuffer& SynthController::generateNextMidiBuffer(int inNumSamples, bool
             mProcessor->getPlayer()->setPlayingState(false);
         }
 
-        setNewTimeSeconds(0);
+        mScheduler.setTimeSeconds(0.0);
     }
 
     return mMidiBuffer;
@@ -59,15 +67,18 @@ void SynthController::reset()
 {
     const ScopedLock sl(mProcessor->getCallbackLock());
 
+    mPendingSeekTime.store(-1.0, std::memory_order_release);
     mScheduler.reset();
 }
 
 void SynthController::setNewTimeSeconds(double inNewTime)
 {
-    mScheduler.setTimeSeconds(inNewTime);
+    jassert(inNewTime >= 0.0);
+    mPendingSeekTime.store(std::max(0.0, inNewTime), std::memory_order_release);
 }
 
 double SynthController::getCurrentTimeSeconds() const
 {
-    return mScheduler.getTimeSeconds();
+    const double pending_seek = mPendingSeekTime.load(std::memory_order_acquire);
+    return pending_seek >= 0.0 ? pending_seek : mScheduler.getTimeSeconds();
 }

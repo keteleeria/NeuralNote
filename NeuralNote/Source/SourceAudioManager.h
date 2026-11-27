@@ -175,6 +175,8 @@ private:
     std::vector<juce::File> mFilesToDelete;
 
     double mSampleRate = 44100;
+    int mMaxBlockSize = 0;
+    int mWriterNumChannels = 0;
 
     // Captured on the audio thread while recording, read on the message thread at export. Both
     // stay zero for a take made with the transport stopped, and for a dropped file.

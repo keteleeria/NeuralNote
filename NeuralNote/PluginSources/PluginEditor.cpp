@@ -10,6 +10,9 @@ NeuralNoteEditor::NeuralNoteEditor(NeuralNoteAudioProcessor& p)
 {
     NnLogger::write(NnLogger::Level::Debug, "NeuralNoteEditor: opened");
 
+    // Once per editor, before the view is built so it honours what the file now holds.
+    NnGlobalSettings::reload();
+
     mMainView = std::make_unique<NeuralNoteMainView>(p);
 
     addAndMakeVisible(*mMainView);
@@ -18,9 +21,6 @@ NeuralNoteEditor::NeuralNoteEditor(NeuralNoteAudioProcessor& p)
     mConstrainer.onResizeEnd = [this] { _persistScale(); };
     setConstrainer(&mConstrainer);
     setResizable(true, true);
-
-    // Once per editor, so a window opened after the file changed honours what it now holds.
-    NnGlobalSettings::reload();
 
     mPersistedScale = NnGlobalSettings::getEditorScale();
     _setScale(mPersistedScale);

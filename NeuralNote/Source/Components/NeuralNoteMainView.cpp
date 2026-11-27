@@ -77,7 +77,10 @@ NeuralNoteMainView::NeuralNoteMainView(NeuralNoteAudioProcessor& processor)
     updateEnablements();
 
     addChildComponent(mUpdateCheck.get());
-    mUpdateCheck->checkForUpdate(false);
+
+    if (NnGlobalSettings::getAutoUpdateCheckEnabled()) {
+        mUpdateCheck->checkForUpdate(false);
+    }
 
     // Only to notice the processor state and the transport changing under the UI. Nothing here
     // repaints unconditionally: everything that moves per frame is on a vblank callback of its own.
@@ -389,11 +392,16 @@ void NeuralNoteMainView::_buildSettingsMenu()
 
     PopupMenu crash_menu;
 
-    auto crash_reports_item = PopupMenu::Item("Enable crash reports");
+    const bool crash_reports_available = CrashReporter::isAvailable();
+    auto crash_reports_item =
+        PopupMenu::Item(crash_reports_available ? "Enable crash reports" : "Enable crash reports (Standalone only)");
     crash_reports_item.setID(++item_id);
-    crash_reports_item.setEnabled(true);
-    mSettingsMenuItemsShouldBeTicked.emplace_back(crash_reports_item.itemID,
-                                                  [] { return SharedResourcePointer<CrashReporter>()->isEnabled(); });
+    crash_reports_item.setEnabled(crash_reports_available);
+    mSettingsMenuItemsShouldBeEnabled.emplace_back(crash_reports_item.itemID,
+                                                   [crash_reports_available] { return crash_reports_available; });
+    mSettingsMenuItemsShouldBeTicked.emplace_back(
+        crash_reports_item.itemID,
+        [crash_reports_available] { return crash_reports_available && SharedResourcePointer<CrashReporter>()->isEnabled(); });
     crash_reports_item.setTicked(mSettingsMenuItemsShouldBeTicked.back().second());
     crash_reports_item.setAction([this] {
         const SharedResourcePointer<CrashReporter> crash_reporter;
@@ -444,12 +452,24 @@ void NeuralNoteMainView::_buildSettingsMenu()
 
     mSettingsMenu->addSubMenu("Logs", logs_menu);
 
+    auto auto_update_item = PopupMenu::Item("Check for updates automatically");
+    auto_update_item.setID(++item_id);
+    auto_update_item.setEnabled(true);
+    mSettingsMenuItemsShouldBeTicked.emplace_back(auto_update_item.itemID,
+                                                  [] { return NnGlobalSettings::getAutoUpdateCheckEnabled(); });
+    auto_update_item.setTicked(mSettingsMenuItemsShouldBeTicked.back().second());
+    auto_update_item.setAction([this] {
+        NnGlobalSettings::setAutoUpdateCheckEnabled(!NnGlobalSettings::getAutoUpdateCheckEnabled());
+        _refreshSettingsMenu();
+    });
+
     auto check_updates_item = PopupMenu::Item("Check for updates");
     check_updates_item.setID(++item_id);
     check_updates_item.setEnabled(true);
     check_updates_item.setTicked(false);
     check_updates_item.setAction([this] { mUpdateCheck->checkForUpdate(true); });
     mSettingsMenu->addSeparator();
+    mSettingsMenu->addItem(auto_update_item);
     mSettingsMenu->addItem(check_updates_item);
 }
 

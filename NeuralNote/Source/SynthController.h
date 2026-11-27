@@ -5,6 +5,8 @@
 #ifndef SynthController_h
 #define SynthController_h
 
+#include <atomic>
+
 #include <JuceHeader.h>
 
 #include "NoteEvent.h"
@@ -72,6 +74,10 @@ private:
     NoteScheduler mScheduler;
 
     MidiBuffer mMidiBuffer;
+
+    // Written from the message thread on seek, consumed on the audio thread at the start of the
+    // next block so NoteScheduler::mCursor and mNotes are never touched concurrently.
+    std::atomic<double> mPendingSeekTime {-1.0};
 };
 
 #endif // SynthController_h

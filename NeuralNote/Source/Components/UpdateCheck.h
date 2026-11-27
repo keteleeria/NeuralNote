@@ -5,6 +5,8 @@
 #ifndef UPDATECHECK_H
 #define UPDATECHECK_H
 
+#include <memory>
+
 #include <JuceHeader.h>
 
 #include "NnFlatButton.h"
@@ -23,6 +25,8 @@ class UpdateCheck
 public:
     UpdateCheck();
 
+    ~UpdateCheck() override;
+
     void resized() override;
 
     bool hitTest(int inX, int inY) override;
@@ -34,6 +38,8 @@ public:
     void checkForUpdate(bool inShowNotificationOnLatestVersion);
 
 private:
+    class Worker;
+
     void _showNewVersionAvailableNotification();
 
     void _showOnLatestVersionNotification();
@@ -59,6 +65,8 @@ private:
     static constexpr double mTimeIncrementOnMouseOverSeconds = 3.0f;
 
     const juce::URL mWebsiteUrl {"https://neuralnote.co"};
+
+    std::unique_ptr<Worker> mWorker;
 };
 
 #endif //UPDATECHECK_H

@@ -39,6 +39,8 @@ public:
 
     int getNumOutSamplesOnNextProcessBlock(int inNumSamples) const;
 
+    int getMaxBlockSize() const { return mMaxBlockSize; }
+
 private:
     LagrangeInterpolator mInterpolator;
 
@@ -46,10 +48,11 @@ private:
 
     const int mInitPadding = static_cast<int>(LagrangeInterpolator::getBaseLatency());
 
+    int mMaxBlockSize = 0;
     int mNumInputSamplesAvailable = mInitPadding;
-    double mSpeedRatio;
-    double mSourceSampleRate;
-    double mTargetSampleRate;
+    double mSpeedRatio = 1.0;
+    double mSourceSampleRate = 44100.0;
+    double mTargetSampleRate = 44100.0;
 
     // Low pass filter
     std::vector<juce::dsp::IIR::Filter<float>> mLowpassFilters;

@@ -121,11 +121,11 @@ void NeuralNoteAudioProcessor::setStateInformation(const void* data, int sizeInB
 
 void NeuralNoteAudioProcessor::clear()
 {
+    mState.store(EmptyAudioAndMidiRegions);
+
     mPlayer->reset();
     mSourceAudioManager->clear();
     mTranscriptionManager->clear();
-
-    mState.store(EmptyAudioAndMidiRegions);
 
     // Every clear path has to reset the view too, not just the clear button: a cancelled or failed
     // transcription otherwise leaves the audio region sized and scrolled for audio that is gone.

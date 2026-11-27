@@ -20,6 +20,7 @@ namespace
     const char* COMPUTE_DEVICE_KEY = "computeDevice";
     const char* COMPUTE_DEVICE_ORDINAL_KEY = "computeDeviceOrdinal";
     const char* CRASH_REPORTS_ENABLED_KEY = "crashReportsEnabled";
+    const char* AUTO_UPDATE_CHECK_ENABLED_KEY = "autoUpdateCheckEnabled";
     const char* LOG_LEVEL_KEY = "logLevel";
     const char* AUDIO_LOAD_DIRECTORY_KEY = "audioLoadDirectory";
     const char* MIDI_EXPORT_DIRECTORY_KEY = "midiExportDirectory";
@@ -92,6 +93,7 @@ namespace
         props.setValue(COMPUTE_DEVICE_KEY, juce::String(device.name));
         props.setValue(COMPUTE_DEVICE_ORDINAL_KEY, device.ordinal);
         props.setValue(CRASH_REPORTS_ENABLED_KEY, getCrashReportsEnabled());
+        props.setValue(AUTO_UPDATE_CHECK_ENABLED_KEY, getAutoUpdateCheckEnabled());
         props.setValue(LOG_LEVEL_KEY, NnLogger::levelToString(getLogLevel()));
 
         props.save();
@@ -165,6 +167,17 @@ bool getCrashReportsEnabled()
 void setCrashReportsEnabled(bool inEnabled)
 {
     properties().setValue(CRASH_REPORTS_ENABLED_KEY, inEnabled);
+    _saveAllSettings();
+}
+
+bool getAutoUpdateCheckEnabled()
+{
+    return properties().getBoolValue(AUTO_UPDATE_CHECK_ENABLED_KEY, true);
+}
+
+void setAutoUpdateCheckEnabled(bool inEnabled)
+{
+    properties().setValue(AUTO_UPDATE_CHECK_ENABLED_KEY, inEnabled);
     _saveAllSettings();
 }
 

@@ -150,26 +150,32 @@ void NnToolbar::_exportMidiFile()
     mFileChooser = std::make_shared<juce::FileChooser>(
         "Export MIDI", NnGlobalSettings::getMidiExportDirectory().getChildFile(filename), "*.mid");
 
+    const juce::Component::SafePointer<NnToolbar> safe_this(this);
+
     mFileChooser->launchAsync(
         juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
-        [this](const juce::FileChooser& inChooser) {
+        [safe_this](const juce::FileChooser& inChooser) {
+            if (safe_this == nullptr) {
+                return;
+            }
+
             const juce::File file = inChooser.getResult();
 
             if (file == juce::File {}) {
                 return;
             }
 
-            const double export_bpm = mProcessor.getValueTree().getProperty(NnId::ExportTempoId, 120.0);
+            const double export_bpm = safe_this->mProcessor.getValueTree().getProperty(NnId::ExportTempoId, 120.0);
             const auto overflow_mode =
-                static_cast<MidiOverflowMode>(static_cast<int>(mProcessor.getValueTree().getProperty(
+                static_cast<MidiOverflowMode>(static_cast<int>(safe_this->mProcessor.getValueTree().getProperty(
                     NnId::MidiOverflowModeId, static_cast<int>(MidiOverflowMode::ReuseChannels))));
 
             const bool success =
-                mMidiFileWriter.writeMidiFile(mProcessor.getTranscriptionManager()->getNoteEventVector(),
-                                              file,
-                                              export_bpm,
-                                              mProcessor.getSourceAudioManager()->getExportStartOffsetSeconds(),
-                                              overflow_mode);
+                safe_this->mMidiFileWriter.writeMidiFile(safe_this->mProcessor.getTranscriptionManager()->getNoteEventVector(),
+                                                         file,
+                                                         export_bpm,
+                                                         safe_this->mProcessor.getSourceAudioManager()->getExportStartOffsetSeconds(),
+                                                         overflow_mode);
 
             if (!success) {
                 NnLogger::write(NnLogger::Level::Error, "NnToolbar: Could not write the MIDI file.");

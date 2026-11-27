@@ -4,13 +4,17 @@
 
 #include "Resampler.h"
 
+#include <algorithm>
+#include <cmath>
+
 void Resampler::prepareToPlay(double inSourceSampleRate, int inMaxBlockSize, double inTargetSampleRate)
 {
-    mSourceSampleRate = inSourceSampleRate;
-    mTargetSampleRate = inTargetSampleRate;
+    mSourceSampleRate = inSourceSampleRate > 0.0 ? inSourceSampleRate : 44100.0;
+    mTargetSampleRate = inTargetSampleRate > 0.0 ? inTargetSampleRate : 44100.0;
     mSpeedRatio = mSourceSampleRate / mTargetSampleRate;
+    mMaxBlockSize = std::max(1, inMaxBlockSize);
 
-    mInternalBuffer.setSize(1, inMaxBlockSize + 2 * static_cast<int>(LagrangeInterpolator::getBaseLatency()) + 1);
+    mInternalBuffer.setSize(1, mMaxBlockSize + 2 * static_cast<int>(LagrangeInterpolator::getBaseLatency()) + 1);
 
     // Lowpass filter stuffs
     if (mTargetSampleRate < mSourceSampleRate) {
@@ -47,8 +51,19 @@ int Resampler::processBlock(const float* inBuffer, float* outBuffer, int inNumSa
 
 int Resampler::processBlock(const float* const* inChannels, int inNumChannels, float* outBuffer, int inNumSamples)
 {
-    jassert(mNumInputSamplesAvailable + inNumSamples <= mInternalBuffer.getNumSamples());
-    jassert(inNumChannels >= 1);
+    if (inChannels == nullptr || outBuffer == nullptr || inNumChannels < 1 || inNumSamples <= 0) {
+        return 0;
+    }
+
+    const int max_writable = mInternalBuffer.getNumSamples() - mNumInputSamplesAvailable;
+
+    if (max_writable <= 0) {
+        jassertfalse;
+        return 0;
+    }
+
+    jassert(inNumSamples <= max_writable);
+    const int samples_to_process = std::min(inNumSamples, max_writable);
 
     float* internal_buffer_ptr = mInternalBuffer.getWritePointer(0);
 
@@ -56,7 +71,7 @@ int Resampler::processBlock(const float* const* inChannels, int inNumChannels, f
     // the model is sensitive to level.
     const float scale = 1.0f / static_cast<float>(inNumChannels);
 
-    for (int i = 0; i < inNumSamples; i++) {
+    for (int i = 0; i < samples_to_process; i++) {
         float sum = 0.0f;
 
         for (int ch = 0; ch < inNumChannels; ch++) {
@@ -68,7 +83,7 @@ int Resampler::processBlock(const float* const* inChannels, int inNumChannels, f
 
     // Lowpass filter if necessary
     if (mTargetSampleRate < mSourceSampleRate) {
-        for (int i = 0; i < inNumSamples; i++) {
+        for (int i = 0; i < samples_to_process; i++) {
             for (auto& lowpass_filter: mLowpassFilters) {
                 internal_buffer_ptr[mNumInputSamplesAvailable + i] =
                     lowpass_filter.processSample(internal_buffer_ptr[mNumInputSamplesAvailable + i]);
@@ -76,7 +91,7 @@ int Resampler::processBlock(const float* const* inChannels, int inNumChannels, f
         }
     }
 
-    mNumInputSamplesAvailable += inNumSamples;
+    mNumInputSamplesAvailable += samples_to_process;
 
     int num_out_samples_to_produce = static_cast<int>(std::floor(mNumInputSamplesAvailable / mSpeedRatio));
 
@@ -85,7 +100,7 @@ int Resampler::processBlock(const float* const* inChannels, int inNumChannels, f
 
     jassert(num_input_samples_used <= mNumInputSamplesAvailable);
 
-    mNumInputSamplesAvailable -= num_input_samples_used;
+    mNumInputSamplesAvailable = std::max(0, mNumInputSamplesAvailable - num_input_samples_used);
 
     for (int i = 0; i < mNumInputSamplesAvailable; i++) {
         mInternalBuffer.setSample(0, i, mInternalBuffer.getSample(0, i + num_input_samples_used));

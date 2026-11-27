@@ -58,6 +58,10 @@ void setComputeDevice(const ComputeDeviceChoice& inChoice);
 bool getCrashReportsEnabled();
 void setCrashReportsEnabled(bool inEnabled);
 
+/** Whether UpdateCheck contacts GitHub automatically when an editor opens. On by default. */
+bool getAutoUpdateCheckEnabled();
+void setAutoUpdateCheckEnabled(bool inEnabled);
+
 /** Info by default. Saving does not apply it: see NnLogger::setLevel. */
 NnLogger::Level getLogLevel();
 void setLogLevel(NnLogger::Level inLevel);

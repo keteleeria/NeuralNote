@@ -4,6 +4,9 @@
 
 #include "UpdateCheck.h"
 
+#include <algorithm>
+#include <atomic>
+
 #include "NnFonts.h"
 #include "NnIcons.h"
 #include "NnLook.h"
@@ -14,6 +17,11 @@ namespace
 constexpr int CONTENT_GAP = 9;
 
 constexpr int BUTTON_HEIGHT = 24;
+
+constexpr int CONNECTION_TIMEOUT_MS = 4000;
+constexpr int MAX_REDIRECTS = 5;
+constexpr size_t MAX_RESPONSE_BYTES = 256 * 1024;
+constexpr int READ_CHUNK_BYTES = 4096;
 
 /** Compares dotted versions numerically, ignoring a leading "v"; missing components count as 0. */
 bool isNewerVersion(const juce::String& inCandidate, const juce::String& inCurrent)
@@ -38,7 +46,134 @@ bool isNewerVersion(const juce::String& inCandidate, const juce::String& inCurre
 }
 } // namespace
 
+class UpdateCheck::Worker : public juce::Thread
+{
+public:
+    explicit Worker(UpdateCheck& inOwner)
+        : juce::Thread("NeuralNote update check")
+        , mOwner(&inOwner)
+    {
+    }
+
+    ~Worker() override
+    {
+        requestStop();
+        stopThread(-1);
+    }
+
+    void startCheck(bool inShowNotificationOnLatestVersion)
+    {
+        if (isThreadRunning()) {
+            if (inShowNotificationOnLatestVersion) {
+                mShowOnLatest.store(true, std::memory_order_relaxed);
+            }
+
+            return;
+        }
+
+        mShowOnLatest.store(inShowNotificationOnLatestVersion, std::memory_order_relaxed);
+        startThread();
+    }
+
+    void requestStop()
+    {
+        signalThreadShouldExit();
+
+        const juce::ScopedLock lock(mStreamLock);
+
+        if (mStream != nullptr) {
+            mStream->cancel();
+        }
+    }
+
+private:
+    void run() override
+    {
+        const juce::URL url("https://api.github.com/repos/DamRsn/NeuralNote/releases/latest");
+
+        juce::WebInputStream stream(url, false);
+        stream.withConnectionTimeout(CONNECTION_TIMEOUT_MS).withNumRedirectsToFollow(MAX_REDIRECTS);
+
+        {
+            const juce::ScopedLock lock(mStreamLock);
+            mStream = &stream;
+        }
+
+        const juce::ScopeGuard forget_stream {[this] {
+            const juce::ScopedLock lock(mStreamLock);
+            mStream = nullptr;
+        }};
+
+        if (threadShouldExit() || !stream.connect(nullptr)) {
+            return;
+        }
+
+        if (stream.getStatusCode() != 200) {
+            return;
+        }
+
+        juce::MemoryOutputStream body;
+        char buffer[READ_CHUNK_BYTES];
+
+        while (!threadShouldExit() && body.getDataSize() < MAX_RESPONSE_BYTES) {
+            const int max_read = static_cast<int>(
+                std::min<size_t>(static_cast<size_t>(READ_CHUNK_BYTES), MAX_RESPONSE_BYTES - body.getDataSize()));
+            const int num_read = stream.read(buffer, max_read);
+
+            if (num_read <= 0) {
+                break;
+            }
+
+            body.write(buffer, static_cast<size_t>(num_read));
+        }
+
+        if (threadShouldExit()) {
+            return;
+        }
+
+        const juce::String result = body.toUTF8();
+
+        if (result.isEmpty()) {
+            return;
+        }
+
+        const auto json = juce::JSON::parse(result);
+
+        if (!json.isObject()) {
+            return;
+        }
+
+        const auto current_version = juce::String(JucePlugin_VersionString);
+        const auto latest_version = json.getProperty("tag_name", {}).toString();
+        const bool show_on_latest = mShowOnLatest.load(std::memory_order_relaxed);
+        if (threadShouldExit()) {
+            return;
+        }
+
+        const juce::Component::SafePointer<UpdateCheck> safe_this = mOwner;
+
+        juce::MessageManager::callAsync([current_version, latest_version, show_on_latest, safe_this] {
+            if (safe_this == nullptr) {
+                return;
+            }
+
+            if (isNewerVersion(latest_version, current_version)) {
+                safe_this->_showNewVersionAvailableNotification();
+            } else if (show_on_latest) {
+                safe_this->_showOnLatestVersionNotification();
+            }
+        });
+    }
+
+    juce::Component::SafePointer<UpdateCheck> mOwner;
+    std::atomic<bool> mShowOnLatest {false};
+
+    juce::CriticalSection mStreamLock;
+    juce::WebInputStream* mStream = nullptr;
+};
+
 UpdateCheck::UpdateCheck()
+    : mWorker(std::make_unique<Worker>(*this))
 {
     mSeeUpdateButton.setLabel("See update", nn::fonts::buttonLabel());
     mSeeUpdateButton.setPadding(12, 12, 0);
@@ -59,6 +194,12 @@ UpdateCheck::UpdateCheck()
     mDismissButton.setWantsKeyboardFocus(false);
     mDismissButton.onClick = [this] { _hideNotification(); };
     addAndMakeVisible(mDismissButton);
+}
+
+UpdateCheck::~UpdateCheck()
+{
+    stopTimer();
+    mWorker.reset();
 }
 
 juce::String UpdateCheck::_message() const
@@ -133,51 +274,13 @@ void UpdateCheck::timerCallback()
 
 void UpdateCheck::checkForUpdate(bool inShowNotificationOnLatestVersion)
 {
-    // Nothing here can be cancelled, and the editor can close mid-request: every hop back to the
-    // message thread has to check the component is still there.
     const juce::Component::SafePointer<UpdateCheck> safe_this(this);
 
-    // Call async because of issue on Windows with spinning cursor.
+    // Call async because of issue on Windows with spinning cursor when started inside editor construction.
     juce::MessageManager::callAsync([safe_this, inShowNotificationOnLatestVersion] {
-        if (safe_this == nullptr) {
-            return;
+        if (safe_this != nullptr && safe_this->mWorker != nullptr) {
+            safe_this->mWorker->startCheck(inShowNotificationOnLatestVersion);
         }
-
-        juce::Thread::launch([safe_this, inShowNotificationOnLatestVersion] {
-            const juce::URL url("https://api.github.com/repos/DamRsn/NeuralNote/releases/latest");
-
-            const auto result = url.readEntireTextStream();
-
-            if (result.isEmpty()) {
-                return;
-            }
-
-            auto json = juce::JSON::parse(result);
-
-            if (json.isObject()) {
-                const auto current_version = juce::String(JucePlugin_VersionString);
-
-                // Uncomment this line to test the new version available notification
-                // const auto current_version = juce::String("0.0.1");
-
-                const auto latest_version = json.getProperty("tag_name", {}).toString();
-
-                juce::MessageManager::callAsync(
-                    [current_version, latest_version, inShowNotificationOnLatestVersion, safe_this] {
-                        if (safe_this == nullptr) {
-                            return;
-                        }
-
-                        if (isNewerVersion(latest_version, current_version)) {
-                            safe_this->_showNewVersionAvailableNotification();
-                        } else if (inShowNotificationOnLatestVersion) {
-                            safe_this->_showOnLatestVersionNotification();
-                        }
-                    });
-            } else {
-                jassertfalse;
-            }
-        });
     });
 }
 

@@ -208,12 +208,16 @@ void AudioRegion::_openFileChooser()
                                                        false,
                                                        this);
 
-    mFileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                              [this](const juce::FileChooser& fc) {
-                                  if (fc.getResults().isEmpty())
-                                      return;
+    const juce::Component::SafePointer<AudioRegion> safe_this(this);
 
-                                  auto* parent = dynamic_cast<CombinedAudioMidiRegion*>(getParentComponent());
+    mFileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [safe_this](const juce::FileChooser& fc) {
+                                  if (safe_this == nullptr || fc.getResults().isEmpty()) {
+                                      return;
+                                  }
+
+                                  auto* parent =
+                                      dynamic_cast<CombinedAudioMidiRegion*>(safe_this->getParentComponent());
 
                                   if (parent && parent->loadAudioFile(fc.getResult().getFullPathName())) {
                                       NnGlobalSettings::setAudioLoadDirectory(fc.getResult().getParentDirectory());

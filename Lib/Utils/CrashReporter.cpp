@@ -118,9 +118,14 @@ void onAbort(int)
 
 } // namespace
 
+bool CrashReporter::isAvailable()
+{
+    return juce::JUCEApplicationBase::isStandaloneApp();
+}
+
 CrashReporter::CrashReporter()
 {
-    if (NnGlobalSettings::getCrashReportsEnabled()) {
+    if (isAvailable() && NnGlobalSettings::getCrashReportsEnabled()) {
         _install();
     }
 }
@@ -134,6 +139,12 @@ CrashReporter::~CrashReporter()
 
 void CrashReporter::setEnabled(bool inEnabled)
 {
+    if (inEnabled && !isAvailable()) {
+        NnLogger::write(NnLogger::Level::Warning,
+                        "CrashReporter: process-wide crash handlers are only available in the standalone app");
+        return;
+    }
+
     if (inEnabled && !mEnabled) {
         _install();
     } else if (!inEnabled && mEnabled) {
@@ -156,6 +167,10 @@ bool CrashReporter::isEnabled() const
 
 void CrashReporter::_install()
 {
+    if (!isAvailable()) {
+        return;
+    }
+
     const juce::File directory = NNFileUtils::getCrashReportsDirectory();
 
     if (!NNFileUtils::ensureDirectoryExists(directory)) {

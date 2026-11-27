@@ -24,7 +24,10 @@ public:
 
     ~CrashReporter();
 
-    /** Installs or removes the handlers, and saves the setting. Stays off if the directory cannot be created. */
+    /** True only in the standalone app: process-wide handlers are unsafe to unload from a DAW plugin. */
+    static bool isAvailable();
+
+    /** Installs or removes the handlers, and saves the setting. Stays off if unavailable or if the directory cannot be created. */
     void setEnabled(bool inEnabled);
 
     bool isEnabled() const;

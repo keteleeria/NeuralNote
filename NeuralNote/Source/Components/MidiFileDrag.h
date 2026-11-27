@@ -35,7 +35,8 @@ public:
 private:
     NeuralNoteAudioProcessor* mProcessor;
 
-    const juce::File mTempDirectory = NNFileUtils::getMidiDragDirectory();
+    const juce::File mTempDirectory =
+        NNFileUtils::getMidiDragDirectory().getChildFile(juce::Uuid().toString());
 
     MidiFileWriter mMidiFileWriter;
 };
