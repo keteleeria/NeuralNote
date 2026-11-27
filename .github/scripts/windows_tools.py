@@ -119,6 +119,7 @@ def main() -> None:
     clang_cl = llvm_tool("clang-cl").as_posix()
     variables["CC"] = clang_cl
     variables["CXX"] = clang_cl
+    variables["CXXFLAGS"] = (env.get("CXXFLAGS", "") + " /D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH").strip()
     variables["RC"] = llvm_tool("llvm-rc").as_posix()
     variables["CMAKE_LINKER"] = llvm_tool("lld-link").as_posix()
     variables["CMAKE_AR"] = llvm_tool("llvm-lib").as_posix()
